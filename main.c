@@ -245,8 +245,74 @@ static void generate_level(void)
 		&current_level_info.min_difficulty,
 		&current_level_info.max_difficulty,
 		&current_level_info.permutation);
-	current_level_info.seed = randint(0, 2147483647);
+	current_level_info.seed = (int)randint(0, 2147483647);
 	current_level_info.location = locations[randint(0, sizeof(locations) / sizeof(locations[0]) - 1)];
+}
+
+static BOOL is_consistent(const permutation_info *a, const permutation_info *b)
+{
+	BOOL a_subset_b, b_subset_a;
+	double a_difficulty, b_difficulty;
+
+	a_subset_b = is_subset(&a->permutation, &b->permutation);
+	b_subset_a = is_subset(&b->permutation, &a->permutation);
+
+	if (!a_subset_b && !b_subset_a)
+		return TRUE;
+
+	a_difficulty = a->difficulty_numerator / (double)a->difficulty_denominator;
+	b_difficulty = b->difficulty_numerator / (double)b->difficulty_denominator;
+
+	if (a_subset_b && a_difficulty > b_difficulty)
+		return FALSE;
+
+	if (b_subset_a && b_difficulty > a_difficulty)
+		return FALSE;
+
+	return TRUE;
+}
+
+static void update_info(permutation *p, int difficulty_numerator, int difficulty_denominator)
+{
+	int i;
+	permutation_info new_info;
+
+	for (i = 0; i < global_infos.len; i++)
+	{
+		if (memcmp(&global_infos.items[i].permutation, p, sizeof(permutation)) == 0)
+			break;
+	}
+
+	memcpy(new_info.permutation, *p, sizeof(new_info.permutation));
+
+	if (i < global_infos.len)
+	{
+		new_info.difficulty_denominator = global_infos.items[i].difficulty_denominator + difficulty_denominator;
+		new_info.difficulty_numerator = global_infos.items[i].difficulty_numerator + difficulty_numerator;
+		global_infos.items[i] = global_infos.items[global_infos.len - 1];
+		global_infos.len--;
+	}
+	else
+	{
+		new_info.difficulty_denominator = difficulty_denominator;
+		new_info.difficulty_numerator = difficulty_numerator;
+	}
+
+	// Remove anything inconsistent with this info
+	i = 0;
+	while (i < global_infos.len)
+	{
+		if (is_consistent(&new_info, &global_infos.items[i]))
+			i++;
+		else
+		{
+			global_infos.items[i] = global_infos.items[global_infos.len - 1];
+			global_infos.len--;
+		}
+	}
+
+	// Add the new info
+	append_info(&global_infos, &new_info);
 }
 
 static wchar_t* strdup_wprintf(const wchar_t *format, ...)
@@ -306,7 +372,8 @@ static LRESULT CALLBACK main_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM 
 
 		level_code = get_level_code();
 
-		output = strdup_wprintf(L"Level code:\n%s\n\nDifficulty: %.1f%%", level_code, rand_double() * 100.0);
+		output = strdup_wprintf(L"Level code:\n%s\n\nDesired difficulty: %.1f%%\nExpected difficulty: %.1f-%.1f%%", level_code,
+			current_level_info.desired_difficulty*100, current_level_info.min_difficulty*100, current_level_info.max_difficulty*100);
 
 		GetClientRect(hwnd, &client);
 
