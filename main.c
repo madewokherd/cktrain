@@ -1,12 +1,13 @@
 #include <windows.h>
 #include <stdio.h>
 #include <assert.h>
+#include <sys/stat.h>
 
 HWND main_window;
 
 LPWSTR filename;
 LPWSTR info_filename;
-LPWSTR info_backup_filename;
+LPWSTR info_temp_filename;
 
 LPWSTR code_prefix;
 
@@ -154,6 +155,36 @@ static LONGLONG randint(LONGLONG lower, LONGLONG upper)
 static double rand_double()
 {
 	return randint(0, 9007199254740991) / 9007199254740992.0;
+}
+
+static void load_db(void)
+{
+	FILE *f;
+	struct stat st;
+
+	f = _wfopen(info_filename, L"rb");
+	if (!f)
+		return;
+	fstat(fileno(f), &st);
+	global_infos.len = global_infos.size = st.st_size / sizeof(permutation_info);
+	if (global_infos.len)
+	{
+		global_infos.items = malloc(st.st_size);
+		fread(global_infos.items, sizeof(permutation_info), global_infos.len, f);
+	}
+	fclose(f);
+}
+
+static void save_db(void)
+{
+	FILE *f;
+
+	f = _wfopen(info_temp_filename, L"wb");
+	fwrite(global_infos.items, sizeof(permutation_info), global_infos.len, f);
+	fclose(f);
+
+	if (!ReplaceFileW(info_filename, info_temp_filename, NULL, 0, NULL, NULL))
+		MoveFile(info_temp_filename, info_filename);
 }
 
 static void get_difficulty_range(permutation *result, double *min_difficulty, double *max_difficulty)
@@ -321,6 +352,8 @@ static void update_info(permutation *p, int difficulty_numerator, int difficulty
 
 	// Add the new info
 	append_info(&global_infos, &new_info);
+
+	save_db();
 }
 
 static wchar_t* strdup_wprintf(const wchar_t *format, ...)
@@ -610,9 +643,11 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLi
 
 	filename = argv[1];
 	info_filename = strdup_wprintf(L"%s.db", filename);
-	info_backup_filename = strdup_wprintf(L"%s.db.bak", filename);
+	info_temp_filename = strdup_wprintf(L"%s.db.tmp", filename);
 
 	code_prefix = read_ascii_file(filename);
+
+	load_db();
 
 	create_mainwindow();
 
