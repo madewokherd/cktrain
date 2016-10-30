@@ -457,6 +457,8 @@ static LRESULT CALLBACK main_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM 
 
 		SetBkMode(hdc, TRANSPARENT);
 
+		SetTextColor(hdc, RGB(80, 150, 255));
+
 		DrawTextW(hdc, output, -1, &client, DT_LEFT | DT_NOPREFIX | DT_TOP | DT_WORDBREAK | DT_EDITCONTROL | DT_NOCLIP);
 
 		free(output);
@@ -553,7 +555,7 @@ static void register_class(void)
 	cls.lpfnWndProc = main_wndproc;
 	cls.hInstance = NULL;
 	cls.hCursor = LoadCursor(0, IDC_ARROW);
-	cls.hbrBackground = (HBRUSH)COLOR_WINDOW;
+	cls.hbrBackground = CreateSolidBrush(RGB(0, 0, 0));
 	cls.lpszClassName = L"main";
 
 	RegisterClassEx(&cls);
