@@ -406,7 +406,23 @@ static double get_mastery(void)
 
 static void update_gui()
 {
+	HANDLE clipdata;
+	wchar_t *level_code;
+	void *lock;
+
 	InvalidateRect(main_window, NULL, TRUE);
+
+	level_code = get_level_code();
+	clipdata = GlobalAlloc(GMEM_MOVEABLE, sizeof(wchar_t) * (wcslen(level_code) + 1));
+	lock = GlobalLock(clipdata);
+	wcscpy(lock, level_code);
+	GlobalUnlock(clipdata);
+	free(level_code);
+
+	OpenClipboard(main_window);
+	EmptyClipboard();
+	SetClipboardData(CF_UNICODETEXT, clipdata);
+	CloseClipboard();
 }
 
 static LRESULT CALLBACK main_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
@@ -563,6 +579,8 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLi
 	create_mainwindow();
 
 	generate_level();
+
+	update_gui();
 
 	loop();
 
