@@ -360,7 +360,7 @@ static wchar_t* get_level_code()
 
 static wchar_t* get_readable_settings(const permutation *p)
 {
-	wchar_t *result = wcsdup(L"");
+	wchar_t *result = _wcsdup(L"");
 	int i;
 
 	for (i = 0; i < sizeof(obstacles) / sizeof(obstacles[0]); i++)
@@ -499,6 +499,34 @@ static LRESULT CALLBACK main_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM 
 
 		break;
 	}
+	case WM_HOTKEY:
+	{
+		switch (wparam)
+		{
+		case 1:
+			update_info(&current_level_info.permutation, 3, 3);
+			generate_level();
+			update_gui();
+			break;
+		case 2:
+			update_info(&current_level_info.permutation, 2, 3);
+			generate_level();
+			update_gui();
+			break;
+		case 3:
+			update_info(&current_level_info.permutation, 1, 3);
+			generate_level();
+			update_gui();
+			break;
+		case 4:
+			update_info(&current_level_info.permutation, 0, 3);
+			generate_level();
+			update_gui();
+			break;
+		}
+
+		break;
+	}
 	}
 
 	return DefWindowProc(hwnd, msg, wparam, lparam);
@@ -558,6 +586,14 @@ static wchar_t* read_ascii_file(LPCWSTR filename)
 	return strdup_wprintf(L"%S", buffer);
 }
 
+static void register_hotkeys(void)
+{
+	RegisterHotKey(main_window, 1, MOD_NOREPEAT, VK_F1);
+	RegisterHotKey(main_window, 2, MOD_NOREPEAT, VK_F2);
+	RegisterHotKey(main_window, 3, MOD_NOREPEAT, VK_F3);
+	RegisterHotKey(main_window, 4, MOD_NOREPEAT, VK_F4);
+}
+
 int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow)
 {
 	int argc;
@@ -581,6 +617,8 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLi
 	generate_level();
 
 	update_gui();
+
+	register_hotkeys();
 
 	loop();
 
