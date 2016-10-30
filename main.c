@@ -23,7 +23,7 @@ const struct obstacle obstacles[] = {
 	{11, L"Spikey Line"},
 	{12, L"Lasers"},
 	{13, L"Ghost Blocks"},
-	{14, L"Bouncy BLocks"},
+	{14, L"Bouncy Blocks"},
 	{15, L"Clouds"},
 	//{16, L"Conveyors"},
 	{17, L"Pendulums"},
@@ -353,6 +353,26 @@ static wchar_t* get_level_code()
 	return result;
 }
 
+static wchar_t* get_readable_settings(const permutation *p)
+{
+	wchar_t *result = wcsdup(L"");
+	int i;
+
+	for (i = 0; i < sizeof(obstacles) / sizeof(obstacles[0]); i++)
+	{
+		int index = obstacles[i].index;
+		if ((*p)[index] != 0)
+		{
+			wchar_t *new_result;
+			new_result = strdup_wprintf(L"%s%s: %.0f%%\n", result, obstacles[i].name, (*p)[index] / (double)MAX_OBSTACLE_SETTING * 100);
+			free(result);
+			result = new_result;
+		}
+	}
+
+	return result;
+}
+
 static void update_gui()
 {
 	InvalidateRect(main_window, NULL, TRUE);
@@ -369,7 +389,7 @@ static LRESULT CALLBACK main_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM 
 	{
 		PAINTSTRUCT ps;
 		HDC hdc;
-		wchar_t *output, *level_code;
+		wchar_t *output, *level_code, *readable_settings;
 		RECT client;
 		int save;
 
@@ -379,8 +399,11 @@ static LRESULT CALLBACK main_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM 
 
 		level_code = get_level_code();
 
-		output = strdup_wprintf(L"Level code:\n%s\n\nDesired difficulty: %.0f%%\nExpected difficulty: %.0f-%.0f%%", level_code,
-			current_level_info.desired_difficulty*100, current_level_info.min_difficulty*100, current_level_info.max_difficulty*100);
+		readable_settings = get_readable_settings(&current_level_info.permutation);
+
+		output = strdup_wprintf(L"Level code:\n%s\n\nDesired difficulty: %.0f%%\nExpected difficulty: %.0f-%.0f%%\n\n%s", level_code,
+			current_level_info.desired_difficulty*100, current_level_info.min_difficulty*100, current_level_info.max_difficulty*100,
+			readable_settings);
 
 		GetClientRect(hwnd, &client);
 
@@ -391,6 +414,8 @@ static LRESULT CALLBACK main_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM 
 		free(output);
 
 		free(level_code);
+
+		free(readable_settings);
 
 		RestoreDC(hdc, save);
 
