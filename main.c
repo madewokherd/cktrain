@@ -4,6 +4,12 @@
 
 HWND main_window;
 
+LPWSTR filename;
+LPWSTR info_filename;
+LPWSTR info_backup_filename;
+
+LPWSTR code_prefix;
+
 typedef struct obstacle {
 	int index;
 	const wchar_t *name;
@@ -338,7 +344,6 @@ static wchar_t* strdup_wprintf(const wchar_t *format, ...)
 
 static wchar_t* get_level_code()
 {
-	static const wchar_t *code_prefix = L"CODE_PREFIX";
 	wchar_t *result;
 	wchar_t *settings;
 	int i;
@@ -520,11 +525,42 @@ static HWND create_mainwindow(void)
 	return main_window;
 }
 
+static wchar_t* read_ascii_file(LPCWSTR filename)
+{
+	char buffer[4096];
+	size_t len;
+	FILE *f;
+
+	f = _wfopen(filename, L"r");
+	len = fread(buffer, 1, sizeof(buffer) - 1, f);
+	fclose(f);
+
+	buffer[len] = '\0';
+	while (buffer[len - 1] == '\r' || buffer[len - 1] == '\n')
+		buffer[--len] = '\0';
+
+	return strdup_wprintf(L"%S", buffer);
+}
+
 int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow)
 {
-	create_mainwindow();
+	int argc;
+	LPWSTR* argv;
 
-	// load data
+	argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+	if (argc < 2)
+	{
+		MessageBoxW(NULL, L"A filename is required", L"cktrain", MB_ICONERROR|MB_OK);
+		return 0;
+	}
+
+	filename = argv[1];
+	info_filename = strdup_wprintf(L"%s.db", filename);
+	info_backup_filename = strdup_wprintf(L"%s.db.bak", filename);
+
+	code_prefix = read_ascii_file(filename);
+
+	create_mainwindow();
 
 	generate_level();
 
