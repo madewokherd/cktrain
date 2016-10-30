@@ -1,12 +1,60 @@
 #include <windows.h>
 #include <stdio.h>
 
+static wchar_t* strdup_wprintf(const wchar_t *format, ...)
+{
+	va_list args;
+	wchar_t *str;
+	int len;
+
+	va_start(args, format);
+
+	len = _vscwprintf(format, args);
+
+	str = malloc(sizeof(wchar_t) * (len + 1));
+
+	_vswprintf(str, format, args);
+
+	va_end(args);
+
+	return str;
+}
+
 static LRESULT CALLBACK main_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 {
 	switch (msg)
 	{
 	case WM_DESTROY:
 		PostQuitMessage(0);
+		break;
+	case WM_PAINT:
+	{
+		PAINTSTRUCT ps;
+		HDC hdc;
+		wchar_t *output;
+		RECT client;
+		int save;
+
+		hdc = BeginPaint(hwnd, &ps);
+
+		save = SaveDC(hdc);
+
+		output = strdup_wprintf(L"Level code:\n%s\n\nDifficulty: %.1f%%", L"LEVELCODE", 99.9);
+
+		GetClientRect(hwnd, &client);
+
+		SetBkMode(hdc, TRANSPARENT);
+
+		DrawTextW(hdc, output, -1, &client, DT_LEFT | DT_NOPREFIX | DT_TOP | DT_WORDBREAK);
+
+		free(output);
+
+		RestoreDC(hdc, save);
+
+		EndPaint(hwnd, &ps);
+
+		break;
+	}
 	}
 
 	return DefWindowProc(hwnd, msg, wparam, lparam);
