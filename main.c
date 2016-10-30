@@ -2,6 +2,8 @@
 #include <stdio.h>
 #include <assert.h>
 
+HWND main_window;
+
 typedef struct obstacle {
 	int index;
 	const wchar_t *name;
@@ -86,7 +88,7 @@ static BOOL is_subset(const permutation* sub, const permutation* sup)
 
 	for (i = 0; i < NUM_OBSTACLES; i++)
 	{
-		if (sub[i] > sup[i])
+		if ((*sub)[i] > (*sup)[i])
 			return FALSE;
 	}
 
@@ -172,7 +174,7 @@ static void get_difficulty_range(permutation *result, double *min_difficulty, do
 		}
 	}
 
-	assert(*min_difficulty < *max_difficulty);
+	assert(*min_difficulty <= *max_difficulty);
 }
 
 static void choose_permutation(double *desired_difficulty, double *min_difficulty, double *max_difficulty, permutation *result)
@@ -210,7 +212,7 @@ static void choose_permutation(double *desired_difficulty, double *min_difficult
 			// the range includes our desired difficulty, good
 			break;
 
-		while (candidate[obstacle] > 1)
+		while (candidate[obstacle] > 0)
 		{
 			double prev_max = *max_difficulty;
 
@@ -340,15 +342,20 @@ static wchar_t* get_level_code()
 	wchar_t *result;
 	wchar_t *settings;
 	int i;
-	settings = strdup_wprintf(L"%g", current_level_info.permutation[0] / (double)MAX_OBSTACLE_SETTING);
-	for (i = 1; i < sizeof(obstacles) / sizeof(obstacles[0]); i++)
+	settings = strdup_wprintf(L"%g", current_level_info.permutation[0] / (double)MAX_OBSTACLE_SETTING * 9.0);
+	for (i = 1; i < NUM_OBSTACLES; i++)
 	{
-		wchar_t *new_settings = strdup_wprintf(L"%s,%g", settings, current_level_info.permutation[0] / (double)MAX_OBSTACLE_SETTING);
+		wchar_t *new_settings = strdup_wprintf(L"%s,%g", settings, current_level_info.permutation[i] / (double)MAX_OBSTACLE_SETTING * 9.0);
 		free(settings);
 		settings = new_settings;
 	}
 	result = strdup_wprintf(L"%s;s:%i;t:%s;u:%s", code_prefix, current_level_info.seed, current_level_info.location, settings);
 	return result;
+}
+
+static void update_gui()
+{
+	InvalidateRect(main_window, NULL, TRUE);
 }
 
 static LRESULT CALLBACK main_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
@@ -372,7 +379,7 @@ static LRESULT CALLBACK main_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM 
 
 		level_code = get_level_code();
 
-		output = strdup_wprintf(L"Level code:\n%s\n\nDesired difficulty: %.1f%%\nExpected difficulty: %.1f-%.1f%%", level_code,
+		output = strdup_wprintf(L"Level code:\n%s\n\nDesired difficulty: %.0f%%\nExpected difficulty: %.0f-%.0f%%", level_code,
 			current_level_info.desired_difficulty*100, current_level_info.min_difficulty*100, current_level_info.max_difficulty*100);
 
 		GetClientRect(hwnd, &client);
@@ -388,6 +395,34 @@ static LRESULT CALLBACK main_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM 
 		RestoreDC(hdc, save);
 
 		EndPaint(hwnd, &ps);
+
+		break;
+	}
+	case WM_KEYDOWN:
+	{
+		switch (wparam)
+		{
+		case '1':
+			update_info(&current_level_info.permutation, 3, 3);
+			generate_level();
+			update_gui();
+			break;
+		case '2':
+			update_info(&current_level_info.permutation, 2, 3);
+			generate_level();
+			update_gui();
+			break;
+		case '3':
+			update_info(&current_level_info.permutation, 1, 3);
+			generate_level();
+			update_gui();
+			break;
+		case '4':
+			update_info(&current_level_info.permutation, 0, 3);
+			generate_level();
+			update_gui();
+			break;
+		}
 
 		break;
 	}
@@ -427,8 +462,10 @@ static HWND create_mainwindow(void)
 {
 	register_class();
 
-	return CreateWindowEx(0, L"main", L"cktrain", WS_OVERLAPPEDWINDOW|WS_VISIBLE, CW_USEDEFAULT, CW_USEDEFAULT,
+	main_window = CreateWindowEx(0, L"main", L"cktrain", WS_OVERLAPPEDWINDOW|WS_VISIBLE, CW_USEDEFAULT, CW_USEDEFAULT,
 		200, 720, NULL, NULL, NULL, NULL);
+
+	return main_window;
 }
 
 int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow)
