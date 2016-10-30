@@ -1,5 +1,6 @@
 #include <windows.h>
 #include <stdio.h>
+#include <assert.h>
 
 typedef struct obstacle {
 	int index;
@@ -50,6 +51,15 @@ typedef struct permutation_infos {
 
 permutation_infos global_infos;
 
+struct {
+	permutation permutation;
+	double desired_difficulty;
+	double min_difficulty;
+	double max_difficulty;
+	int seed;
+	const wchar_t *location;
+} current_level_info;
+
 static void append_info(permutation_infos *list, const permutation_info *item)
 {
 	if (list->len == list->size)
@@ -70,7 +80,7 @@ static void free_infos(permutation_infos *list)
 	list->len = list->size = 0;
 }
 
-static BOOL is_superset(const permutation* sub, const permutation* sup)
+static BOOL is_subset(const permutation* sub, const permutation* sup)
 {
 	int i;
 
@@ -114,11 +124,11 @@ static int get_random_bit()
 	return result;
 }
 
-static int randint(int lower, int upper)
+static LONGLONG randint(LONGLONG lower, LONGLONG upper)
 {
-	int range = upper - lower;
-	int gen_upper;
-	int result;
+	LONGLONG range = upper - lower;
+	LONGLONG gen_upper;
+	LONGLONG result;
 
 	do {
 		gen_upper = 1;
@@ -131,6 +141,112 @@ static int randint(int lower, int upper)
 	} while (result > range);
 
 	return result + lower;
+}
+
+static double rand_double()
+{
+	return randint(0, 9007199254740991) / 9007199254740992.0;
+}
+
+static void get_difficulty_range(permutation *result, double *min_difficulty, double *max_difficulty)
+{
+	int i;
+
+	*min_difficulty = 0.0;
+	*max_difficulty = 1.0;
+
+	for (i = 0; i < global_infos.len; i++)
+	{
+		permutation_info *info = &global_infos.items[i];
+		if (is_subset(result, &info->permutation))
+		{
+			double difficulty = info->difficulty_numerator / (double)info->difficulty_denominator;
+			if (difficulty < *max_difficulty)
+				*max_difficulty = difficulty;
+		}
+		if (is_subset(&info->permutation, result))
+		{
+			double difficulty = info->difficulty_numerator / (double)info->difficulty_denominator;
+			if (difficulty > *min_difficulty)
+				*min_difficulty = difficulty;
+		}
+	}
+
+	assert(*min_difficulty < *max_difficulty);
+}
+
+static void choose_permutation(double *desired_difficulty, double *min_difficulty, double *max_difficulty, permutation *result)
+{
+	permutation candidate = { 0 };
+	static const int num_obstacles = sizeof(obstacles) / sizeof(obstacles[0]);
+	int remaining_obstacles[sizeof(obstacles) / sizeof(obstacles[0])];
+	int i;
+
+	*desired_difficulty = rand_double();
+
+	get_difficulty_range(&candidate, min_difficulty, max_difficulty);
+
+	if (*min_difficulty <= *desired_difficulty && *desired_difficulty <= *max_difficulty)
+		return;
+
+	for (i = 0; i < num_obstacles; i++)
+		remaining_obstacles[i] = i;
+
+	for (i = 0; i < num_obstacles; i++)
+	{
+		int n = (int)randint(i, num_obstacles - 1);
+		int obstacle = obstacles[remaining_obstacles[n]].index;
+		remaining_obstacles[n] = remaining_obstacles[i];
+
+		candidate[obstacle] = (unsigned char)randint(1, MAX_OBSTACLE_SETTING);
+
+		get_difficulty_range(&candidate, min_difficulty, max_difficulty);
+
+		// if this configuration is too easy, add another obstacle
+		if (*max_difficulty < *desired_difficulty)
+			continue;
+
+		if (*min_difficulty <= *desired_difficulty)
+			// the range includes our desired difficulty, good
+			break;
+
+		while (candidate[obstacle] > 1)
+		{
+			double prev_max = *max_difficulty;
+
+			candidate[obstacle]--;
+
+			get_difficulty_range(&candidate, min_difficulty, max_difficulty);
+
+			if (*max_difficulty < *desired_difficulty)
+			{
+				// Desired difficulty is in a discontinuity, get as close as we can
+				if (prev_max - *desired_difficulty < *desired_difficulty - *max_difficulty)
+					candidate[obstacle]++;
+				memcpy(result, candidate, sizeof(candidate));
+				return;
+			}
+
+			if (*min_difficulty < *desired_difficulty)
+				// We've lowered it to an acceptable level
+				memcpy(result, candidate, sizeof(candidate));
+			return;
+		}
+	}
+
+	memcpy(result, candidate, sizeof(candidate));
+}
+
+static void generate_level(void)
+{
+	static const wchar_t* locations[] = { L"cloud", L"cave", L"castle", L"forest", L"sea", L"hills" };
+
+	choose_permutation(&current_level_info.desired_difficulty,
+		&current_level_info.min_difficulty,
+		&current_level_info.max_difficulty,
+		&current_level_info.permutation);
+	current_level_info.seed = randint(0, 2147483647);
+	current_level_info.location = locations[randint(0, sizeof(locations) / sizeof(locations[0]) - 1)];
 }
 
 static wchar_t* strdup_wprintf(const wchar_t *format, ...)
@@ -152,6 +268,23 @@ static wchar_t* strdup_wprintf(const wchar_t *format, ...)
 	return str;
 }
 
+static wchar_t* get_level_code()
+{
+	static const wchar_t *code_prefix = L"CODE_PREFIX";
+	wchar_t *result;
+	wchar_t *settings;
+	int i;
+	settings = strdup_wprintf(L"%g", current_level_info.permutation[0] / (double)MAX_OBSTACLE_SETTING);
+	for (i = 1; i < sizeof(obstacles) / sizeof(obstacles[0]); i++)
+	{
+		wchar_t *new_settings = strdup_wprintf(L"%s,%g", settings, current_level_info.permutation[0] / (double)MAX_OBSTACLE_SETTING);
+		free(settings);
+		settings = new_settings;
+	}
+	result = strdup_wprintf(L"%s;s:%i;t:%s;u:%s", code_prefix, current_level_info.seed, current_level_info.location, settings);
+	return result;
+}
+
 static LRESULT CALLBACK main_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 {
 	switch (msg)
@@ -163,7 +296,7 @@ static LRESULT CALLBACK main_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM 
 	{
 		PAINTSTRUCT ps;
 		HDC hdc;
-		wchar_t *output;
+		wchar_t *output, *level_code;
 		RECT client;
 		int save;
 
@@ -171,7 +304,9 @@ static LRESULT CALLBACK main_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM 
 
 		save = SaveDC(hdc);
 
-		output = strdup_wprintf(L"Level code:\n%s\n\nDifficulty: %.1f%%", L"LEVELCODE", randint(0,999) / 10.0);
+		level_code = get_level_code();
+
+		output = strdup_wprintf(L"Level code:\n%s\n\nDifficulty: %.1f%%", level_code, rand_double() * 100.0);
 
 		GetClientRect(hwnd, &client);
 
@@ -180,6 +315,8 @@ static LRESULT CALLBACK main_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM 
 		DrawTextW(hdc, output, -1, &client, DT_LEFT | DT_NOPREFIX | DT_TOP | DT_WORDBREAK);
 
 		free(output);
+
+		free(level_code);
 
 		RestoreDC(hdc, save);
 
@@ -230,6 +367,10 @@ static HWND create_mainwindow(void)
 int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow)
 {
 	create_mainwindow();
+
+	// load data
+
+	generate_level();
 
 	loop();
 
