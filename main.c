@@ -373,6 +373,32 @@ static wchar_t* get_readable_settings(const permutation *p)
 	return result;
 }
 
+static double get_mastery(void)
+{
+	permutation mastered = { 0 };
+	int i, j;
+	permutation_info *info;
+	int result=0;
+
+	for (i = 0; i < global_infos.len; i++)
+	{
+		info = &global_infos.items[i];
+		if (info->difficulty_numerator * 6 < info->difficulty_denominator)
+		{
+			for (j = 0; j < NUM_OBSTACLES; j++)
+			{
+				if (info->permutation[j] > mastered[j])
+					mastered[j] = info->permutation[j];
+			}
+		}
+	}
+
+	for (j = 0; j < NUM_OBSTACLES; j++)
+		result += mastered[j];
+
+	return (double)result / (sizeof(obstacles) / sizeof(obstacles[0]) * MAX_OBSTACLE_SETTING);
+}
+
 static void update_gui()
 {
 	InvalidateRect(main_window, NULL, TRUE);
@@ -401,9 +427,10 @@ static LRESULT CALLBACK main_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM 
 
 		readable_settings = get_readable_settings(&current_level_info.permutation);
 
-		output = strdup_wprintf(L"Level code:\n%s\n\nDesired difficulty: %.0f%%\nExpected difficulty: %.0f-%.0f%%\n\n%s", level_code,
+		output = strdup_wprintf(L"Level code:\n%s\n\nDesired difficulty: %.0f%%\nExpected difficulty: %.0f-%.0f%%\n\n%s\nMastery: %.0f%%", level_code,
 			current_level_info.desired_difficulty*100, current_level_info.min_difficulty*100, current_level_info.max_difficulty*100,
-			readable_settings);
+			readable_settings,
+			get_mastery() * 100);
 
 		GetClientRect(hwnd, &client);
 
