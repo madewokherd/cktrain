@@ -165,7 +165,7 @@ static void load_db(void)
 	f = _wfopen(info_filename, L"rb");
 	if (!f)
 		return;
-	fstat(fileno(f), &st);
+	fstat(_fileno(f), &st);
 	global_infos.len = global_infos.size = st.st_size / sizeof(permutation_info);
 	if (global_infos.len)
 	{
@@ -251,7 +251,7 @@ static void choose_permutation(double *desired_difficulty, double *min_difficult
 
 		while (candidate[obstacle] > 0)
 		{
-			double prev_max = *max_difficulty;
+			double prev_min = *min_difficulty;
 
 			candidate[obstacle]--;
 
@@ -260,16 +260,18 @@ static void choose_permutation(double *desired_difficulty, double *min_difficult
 			if (*max_difficulty < *desired_difficulty)
 			{
 				// Desired difficulty is in a discontinuity, get as close as we can
-				if (prev_max - *desired_difficulty < *desired_difficulty - *max_difficulty)
+				if (prev_min - *desired_difficulty < *desired_difficulty - *max_difficulty)
 					candidate[obstacle]++;
 				memcpy(result, candidate, sizeof(candidate));
 				return;
 			}
 
 			if (*min_difficulty < *desired_difficulty)
+			{
 				// We've lowered it to an acceptable level
 				memcpy(result, candidate, sizeof(candidate));
-			return;
+				return;
+			}
 		}
 	}
 
